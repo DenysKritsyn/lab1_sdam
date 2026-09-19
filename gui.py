@@ -1,4 +1,8 @@
 import tkinter as tk
+import collections
+import matplotlib.pyplot as plt
+import tkinter.messagebox as messagebox
+from itertools import accumulate
 from tkinter import messagebox
 from parameters.average import getAverage
 from parameters.median import getMedian
@@ -18,7 +22,7 @@ from parameters.excess import getExcess
 def estimate_parameters():
     raw_data = entry_series.get()
     try:
-        # Allow numbers to be separated by spaces or commas
+        # Numbers can be separated by spaces or commas
         clean_data = raw_data.replace(',', ' ')
         num_series = [float(x) for x in clean_data.split()]
         
@@ -26,34 +30,33 @@ def estimate_parameters():
             messagebox.showwarning("Warning", "Please enter at least one number.")
             return
 
-        # Computations
+        # Compute characteristics
         avg = getAverage(num_series)
         med = getMedian(num_series)
+        scope = getScope(num_series)
+        m_exp = getMathExpectation(num_series)
+        disp = getDispersion(num_series)
+        mod_disp = getModifiedDispersion(num_series)
+        mod_std_dev = getModifiedStandardDeviation(num_series)
+        init_moment_2 = getInitialStatisticalMoment(2, num_series)
+        cent_moment_2 = getCentralStatisticalMoment(2, num_series)
+        std_dev = getStandardDeviation(num_series)
         
+        # Check if mode is possible
         try:
             mod = getMode(num_series)
         except NoModeError:
             mod = "No Mode (all numbers are unique)"
-            
-        scope = getScope(num_series)
-        m_exp = getMathExpectation(num_series)
-        disp = getDispersion(num_series)
-        std_dev = getStandardDeviation(num_series)
-        mod_disp = getModifiedDispersion(num_series)
-        mod_std_dev = getModifiedStandardDeviation(num_series)
-        
-        # Handle potential division by zero
-        try: var = round(getVariation(num_series), 4)
-        except ZeroDivisionError: var = "Error (Math Expectation = 0)"
 
-        init_moment_2 = getInitialStatisticalMoment(2, num_series)
-        cent_moment_2 = getCentralStatisticalMoment(2, num_series)
-        
-        try: asym = round(getAsymmetry(num_series), 4)
-        except ZeroDivisionError: asym = "Error (Standard Deviation = 0)"
-        
-        try: exc = round(getExcess(num_series), 4)
-        except ZeroDivisionError: exc = "Error (Standard Deviation = 0)"
+        # Handle potential division by zero
+        if std_dev == 0:
+            var = "Error (Math Expectation = 0)"
+            asym = "Error (Standard Deviation = 0)"
+            exc = "Error (Standard Deviation = 0)"
+        else:
+            var = round(getVariation(num_series), 4)
+            asym = round(getAsymmetry(num_series), 4)
+            exc = round(getExcess(num_series), 4)
 
         # Display results
         result_text.config(state=tk.NORMAL)
@@ -84,82 +87,108 @@ def estimate_parameters():
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
+def make_step_tuple(base_tuple):
+    """
+    Transforms standard coordinates into two separate sets of lines for ECDF:
+    solid horizontal lines and dashed vertical jumps.
+    """
+    idx, X, F_x, color, title, ylabel = base_tuple
+    
+    x_horiz, y_horiz = [], []
+    x_vert, y_vert = [], []
+    
+    offset = (X[-1] - X[0]) * 0.1 if len(X) > 1 else 1.0
+    
+    x_horiz.extend([X[0] - offset, X[0], float('nan')])
+    y_horiz.extend([0, 0, float('nan')])
+    
+    prev_f_x = 0
+    
+    for i in range(len(X)):
+        current_x = X[i]
+        current_f_x = F_x[i]
+        
+        x_vert.extend([current_x, current_x, float('nan')])
+        y_vert.extend([prev_f_x, current_f_x, float('nan')])
+        
+        next_x = X[i+1] if i < len(X) - 1 else X[-1] + offset
+        
+        x_horiz.extend([current_x, next_x, float('nan')])
+        y_horiz.extend([current_f_x, current_f_x, float('nan')])
+        
+        prev_f_x = current_f_x
+        
+    return (idx, (x_horiz, x_vert), (y_horiz, y_vert), color, title, ylabel)
+
 def plot_graphs():
     raw_data = entry_series.get()
     try:
+        # Parse input data
         clean_data = raw_data.replace(',', ' ')
         num_series = [float(x) for x in clean_data.split()]
+        
         if not num_series:
             messagebox.showwarning("Warning", "Please enter at least one number.")
             return
 
-        import matplotlib.pyplot as plt
-        import collections
-
-        n = len(num_series)
+        # N: Total sample size
+        N = len(num_series) 
+        
+        # X: Sorted list of unique variants
         counts = collections.Counter(num_series)
-        sorted_unique = sorted(counts.keys())
+        X = sorted(counts.keys()) 
         
-        freqs = [counts[val] for val in sorted_unique]
-        rel_freqs = [f / n for f in freqs]
+        # n: List of absolute frequencies
+        n = [counts[x_i] for x_i in X]
         
-        cum_freqs = []
-        c = 0
-        for f in freqs:
-            c += f
-            cum_freqs.append(c)
-            
-        cum_rel_freqs = []
-        cr = 0
-        for rf in rel_freqs:
-            cr += rf
-            cum_rel_freqs.append(cr)
+        # p_star: List of relative frequencies
+        p_star = [n_i / N for n_i in n]
         
+        # m: List of cumulative absolute frequencies
+        m = list(accumulate(n))
+        
+        # F_x: Empirical distribution function
+        F_x = [m_i / N for m_i in m]
+
+
+
+        # Create an area for graphs (2 rows, 3 columns)
         fig, axs = plt.subplots(2, 3, figsize=(15, 10))
-        fig.canvas.manager.set_window_title('Statistical Graphs')
+        fig.canvas.manager.set_window_title('Discrete Series Statistical Graphs')
+        axs = axs.flatten() 
 
-        # Frequency Polygon
-        axs[0, 0].plot(sorted_unique, freqs, marker='o', linestyle='-', color='b')
-        axs[0, 0].set_title('Frequency Polygon')
-        axs[0, 0].set_xlabel('X')
-        axs[0, 0].set_ylabel('Absolute Frequency (n_i)')
-        axs[0, 0].grid(True)
+        plot_configs = [
+            (0, X, n,           'blue',   'Frequency Polygon',               'Absolute Frequency (n_i)'),
+            (1, X, p_star,      'green',  'Relative Frequency Polygon',      'Relative Frequency (p_i*)'),
+            (2, X, m,           'red',    'Cumulative Frequency Curve',      'Cumulative Frequency (m_i)'),
+            (3, X, F_x,         'orange', 'Cumulative Relative Freq. Curve', 'Cumulative Rel. Frequency (m_i / N)'),
+            make_step_tuple((4, X, F_x, 'purple', 'Empirical Distribution Function, F*(x)', 'F*(x)'))
+        ]
 
-        # Relative Frequency Polygon
-        axs[0, 1].plot(sorted_unique, rel_freqs, marker='o', linestyle='-', color='g')
-        axs[0, 1].set_title('Relative Frequency Polygon')
-        axs[0, 1].set_xlabel('X')
-        axs[0, 1].set_ylabel('Relative Frequency (w_i)')
-        axs[0, 1].grid(True)
+        for idx, x_data, y_data, color, title, ylabel in plot_configs:
+            ax = axs[idx]
+            
+            # Specially for 5th graph
+            if idx == 4:
 
-        # Cumulative Frequency Curve (Absolute)
-        axs[0, 2].plot(sorted_unique, cum_freqs, marker='o', linestyle='-', color='r')
-        axs[0, 2].set_title('Cumulative Frequency Curve')
-        axs[0, 2].set_xlabel('X')
-        axs[0, 2].set_ylabel('Cumulative Frequency')
-        axs[0, 2].grid(True)
+                x_h, x_v = x_data
+                y_h, y_v = y_data
+                
+                ax.plot(x_h, y_h, linestyle='-', color=color)
+                ax.plot(x_v, y_v, linestyle='--', color=color, alpha=0.5)
+                ax.plot(X, F_x, 'o', color=color, alpha=0.5)
+            else:
+                ax.plot(x_data, y_data, marker='o', linestyle='-', color=color)
+            
+            ax.set_title(title)
+            ax.set_xlabel('Variants (X)')
+            ax.set_ylabel(ylabel)
+            ax.grid(True)
 
-        # Cumulative Relative Frequency Curve
-        axs[1, 0].plot(sorted_unique, cum_rel_freqs, marker='o', linestyle='-', color='orange')
-        axs[1, 0].set_title('Cumulative Relative Freq. Curve')
-        axs[1, 0].set_xlabel('X')
-        axs[1, 0].set_ylabel('Cumulative Rel. Frequency')
-        axs[1, 0].grid(True)
+        axs[5].axis('off')
 
-        # Empirical CDF (Step function)
-        x_step = [sorted_unique[0] - 1] + sorted_unique + [sorted_unique[-1] + 1]
-        y_step = [0] + list(cum_rel_freqs) + [1]
-        
-        axs[1, 1].step(x_step, y_step, where='post', color='purple')
-        axs[1, 1].plot(sorted_unique, cum_rel_freqs, 'o', color='purple', alpha=0.5)
-        axs[1, 1].set_title('Empirical Distribution Function (ECDF)')
-        axs[1, 1].set_xlabel('X')
-        axs[1, 1].set_ylabel('F*(x)')
-        axs[1, 1].grid(True)
 
-        # Hide the 6th empty subplot
-        axs[1, 2].axis('off')
-
+        # Adjust layout to prevent overlapping labels and render
         plt.tight_layout()
         plt.show()
 
