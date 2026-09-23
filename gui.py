@@ -87,43 +87,36 @@ def estimate_parameters():
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
+# Modify graphic, making him 'step alike'
 def make_step_tuple(base_tuple):
     """
     Transforms standard coordinates into two separate sets of lines for ECDF:
     solid horizontal lines and dashed vertical jumps.
     """
     idx, X, F_x, color, title, ylabel = base_tuple
-    
     x_horiz, y_horiz = [], []
     x_vert, y_vert = [], []
-    
+    x_hollow, y_hollow = [], []
     offset = (X[-1] - X[0]) * 0.1 if len(X) > 1 else 1.0
-    
     x_horiz.extend([X[0] - offset, X[0], float('nan')])
     y_horiz.extend([0, 0, float('nan')])
-    
     prev_f_x = 0
-    
     for i in range(len(X)):
         current_x = X[i]
         current_f_x = F_x[i]
-        
+        x_hollow.append(current_x)
+        y_hollow.append(prev_f_x)
         x_vert.extend([current_x, current_x, float('nan')])
         y_vert.extend([prev_f_x, current_f_x, float('nan')])
-        
         next_x = X[i+1] if i < len(X) - 1 else X[-1] + offset
-        
         x_horiz.extend([current_x, next_x, float('nan')])
         y_horiz.extend([current_f_x, current_f_x, float('nan')])
-        
         prev_f_x = current_f_x
-        
-    return (idx, (x_horiz, x_vert), (y_horiz, y_vert), color, title, ylabel)
+    return (idx, (x_horiz, x_vert, x_hollow), (y_horiz, y_vert, y_hollow), color, title, ylabel)
 
-def plot_graphs():
+def plot_polygons():
     raw_data = entry_series.get()
     try:
-        # Parse input data
         clean_data = raw_data.replace(',', ' ')
         num_series = [float(x) for x in clean_data.split()]
         
@@ -144,52 +137,97 @@ def plot_graphs():
         # p_star: List of relative frequencies
         p_star = [n_i / N for n_i in n]
         
-        # m: List of cumulative absolute frequencies
+        fig, axs = plt.subplots(2, 1, figsize=(15, 12))
+        fig.canvas.manager.set_window_title('Statistical Polygons (Discrete)')
+        axs = axs.flatten() 
+
+        plot_configs = [
+            (0, X, n,      'blue',   'Frequency Polygon',          'Absolute Frequency (n_i)'),
+            (1, X, p_star, 'green',  'Relative Frequency Polygon', 'Relative Frequency (p_i*)'),
+        ]
+
+        for idx, x_data, y_data, color, title, ylabel in plot_configs:
+            ax = axs[idx]
+            ax.plot(x_data, y_data, marker='o', linestyle='-', color=color)
+            ax.set_title(title)
+            ax.set_xlabel('Variants (X)')
+            ax.set_ylabel(ylabel)
+            ax.grid(True, linestyle='--', alpha=0.5)
+            
+            # Exact coordinate values on axes
+            ax.set_xticks(X)
+            ax.set_xticklabels([str(round(x, 2)) for x in X], fontsize=8)
+            y_ticks = sorted(list(set(y_data)))
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels([str(round(y, 3)) for y in y_ticks], fontsize=8)
+
+        plt.tight_layout(pad=3.0, h_pad=8.0)
+        plt.show()
+
+    except Exception as e:
+        messagebox.showerror("Error", f"An error occurred while plotting: {str(e)}")
+
+def plot_curves():
+    raw_data = entry_series.get()
+    try:
+        clean_data = raw_data.replace(',', ' ')
+        num_series = [float(x) for x in clean_data.split()]
+        
+        if not num_series:
+            messagebox.showwarning("Warning", "Please enter at least one number.")
+            return
+
+        N = len(num_series) 
+        counts = collections.Counter(num_series)
+        X = sorted(counts.keys()) 
+        n = [counts[x_i] for x_i in X]
         m = list(accumulate(n))
         
         # F_x: Empirical distribution function
         F_x = [m_i / N for m_i in m]
 
-
-
-        # Create an area for graphs (2 rows, 3 columns)
-        fig, axs = plt.subplots(2, 3, figsize=(15, 10))
-        fig.canvas.manager.set_window_title('Discrete Series Statistical Graphs')
+        fig, axs = plt.subplots(3, 1, figsize=(15, 18))
+        fig.canvas.manager.set_window_title('Statistical Curves (Discrete)')
         axs = axs.flatten() 
 
         plot_configs = [
-            (0, X, n,           'blue',   'Frequency Polygon',               'Absolute Frequency (n_i)'),
-            (1, X, p_star,      'green',  'Relative Frequency Polygon',      'Relative Frequency (p_i*)'),
-            (2, X, m,           'red',    'Cumulative Frequency Curve',      'Cumulative Frequency (m_i)'),
-            (3, X, F_x,         'orange', 'Cumulative Relative Freq. Curve', 'Cumulative Rel. Frequency (m_i / N)'),
-            make_step_tuple((4, X, F_x, 'purple', 'Empirical Distribution Function, F*(x)', 'F*(x)'))
+            (0, X, m,   'red',    'Cumulative Frequency Curve',      'Cumulative Frequency (m_i)'),
+            (1, X, F_x, 'orange', 'Cumulative Relative Freq. Curve', 'Cumulative Rel. Frequency (m_i / N)'),
+            make_step_tuple((2, X, F_x, 'purple', 'Empirical Distribution Function, F*(x)', 'F*(x)'))
         ]
 
         for idx, x_data, y_data, color, title, ylabel in plot_configs:
             ax = axs[idx]
             
-            # Specially for 5th graph
-            if idx == 4:
-
-                x_h, x_v = x_data
-                y_h, y_v = y_data
+            # Specially for 3rd graph
+            if idx == 2:
+                x_h, x_v, x_hol = x_data
+                y_h, y_v, y_hol = y_data
                 
                 ax.plot(x_h, y_h, linestyle='-', color=color)
                 ax.plot(x_v, y_v, linestyle='--', color=color, alpha=0.5)
                 ax.plot(X, F_x, 'o', color=color, alpha=0.5)
+                ax.plot(x_hol, y_hol, 'o', markerfacecolor='white', markeredgecolor=color)
             else:
                 ax.plot(x_data, y_data, marker='o', linestyle='-', color=color)
             
             ax.set_title(title)
             ax.set_xlabel('Variants (X)')
             ax.set_ylabel(ylabel)
-            ax.grid(True)
+            ax.grid(True, linestyle='--', alpha=0.5)
+            
+            # Exact coordinate values on axes
+            ax.set_xticks(X)
+            ax.set_xticklabels([str(round(x, 2)) for x in X], fontsize=8)
+            
+            if idx == 2:
+                y_ticks = sorted(list(set([0] + F_x)))
+            else:
+                y_ticks = sorted(list(set(y_data)))
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels([str(round(y, 3)) for y in y_ticks], fontsize=8)
 
-        axs[5].axis('off')
-
-
-        # Adjust layout to prevent overlapping labels and render
-        plt.tight_layout()
+        plt.tight_layout(pad=3.0, h_pad=8.0)
         plt.show()
 
     except Exception as e:
@@ -222,8 +260,11 @@ buttons_frame.pack(pady=20)
 btn_estimate = tk.Button(buttons_frame, text="Estimate", font=("Arial", 13, "bold"), bg="#4CAF50", fg="white", cursor="hand2", command=estimate_parameters)
 btn_estimate.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
 
-btn_plot = tk.Button(buttons_frame, text="Show Graphs", font=("Arial", 13, "bold"), bg="#2196F3", fg="white", cursor="hand2", command=plot_graphs)
-btn_plot.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
+btn_polygons = tk.Button(buttons_frame, text="Show Polygons", font=("Arial", 13, "bold"), bg="#2196F3", fg="white", cursor="hand2", command=plot_polygons)
+btn_polygons.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
+
+btn_curves = tk.Button(buttons_frame, text="Show Curves", font=("Arial", 13, "bold"), bg="#FF9800", fg="white", cursor="hand2", command=plot_curves)
+btn_curves.pack(side=tk.LEFT, padx=10, ipadx=10, ipady=5)
 
 # Text area for results
 tk.Label(root, text="Results:", font=("Arial", 12, "bold"), bg="#f5f5f5").pack(anchor="w")
