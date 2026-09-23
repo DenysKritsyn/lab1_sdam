@@ -31,20 +31,20 @@ def estimate_parameters():
             return
 
         # Compute characteristics
-        avg = getAverage(num_series)
-        med = getMedian(num_series)
-        scope = getScope(num_series)
-        m_exp = getMathExpectation(num_series)
-        disp = getDispersion(num_series)
-        mod_disp = getModifiedDispersion(num_series)
-        mod_std_dev = getModifiedStandardDeviation(num_series)
-        init_moment_2 = getInitialStatisticalMoment(2, num_series)
-        cent_moment_2 = getCentralStatisticalMoment(2, num_series)
-        std_dev = getStandardDeviation(num_series)
+        avg = round(getAverage(num_series), 2)
+        med = round(getMedian(num_series), 2)
+        scope = round(getScope(num_series), 2)
+        m_exp = round(getMathExpectation(num_series), 2)
+        disp = round(getDispersion(num_series), 2)
+        mod_disp = round(getModifiedDispersion(num_series), 2)
+        mod_std_dev = round(getModifiedStandardDeviation(num_series), 2)
+        init_moment_2 = round(getInitialStatisticalMoment(2, num_series), 2)
+        cent_moment_2 = round(getCentralStatisticalMoment(2, num_series), 2)
+        std_dev = round(getStandardDeviation(num_series), 2)
         
         # Check if mode is possible
         try:
-            mod = getMode(num_series)
+            mod = [round(m, 2) for m in getMode(num_series)]
         except NoModeError:
             mod = "No Mode (all numbers are unique)"
 
@@ -54,9 +54,9 @@ def estimate_parameters():
             asym = "Error (Standard Deviation = 0)"
             exc = "Error (Standard Deviation = 0)"
         else:
-            var = round(getVariation(num_series), 4)
-            asym = round(getAsymmetry(num_series), 4)
-            exc = round(getExcess(num_series), 4)
+            var = round(getVariation(num_series), 2)
+            asym = round(getAsymmetry(num_series), 2)
+            exc = round(getExcess(num_series), 2)
 
         # Display results
         result_text.config(state=tk.NORMAL)
@@ -89,10 +89,7 @@ def estimate_parameters():
 
 # Modify graphic, making him 'step alike'
 def make_step_tuple(base_tuple):
-    """
-    Transforms standard coordinates into two separate sets of lines for ECDF:
-    solid horizontal lines and dashed vertical jumps.
-    """
+
     idx, X, F_x, color, title, ylabel = base_tuple
     x_horiz, y_horiz = [], []
     x_vert, y_vert = [], []
